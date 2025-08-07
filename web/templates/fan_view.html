@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sprint Timer - Fan View</title>
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='style.css') }}"
+    />
+  </head>
+  <body>
+    <div class="container">
+      <header>
+        <h1>Sprint Timer</h1>
+      </header>
+
+      <div class="main-content">
+        <div class="current-runner">
+          <h2>Current Runner</h2>
+          <div id="current-runner-name" class="runner-name">
+            No Runner Selected
+          </div>
+        </div>
+
+        <div class="timer-display">
+          <h2>Elapsed Time</h2>
+          <div id="elapsed-time" class="big-timer">0.00</div>
+        </div>
+
+        <div class="last-run">
+          <h2>Last Run</h2>
+          <div id="last-run-info">
+            <span id="last-runner">--</span>
+            <span id="last-time">--.--</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="leaderboard">
+        <h2>Leaderboard</h2>
+        <div id="leaderboard-content">
+          <div class="loading">Loading...</div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // Live data polling
+      function updateLiveData() {
+        fetch("/api/live_data")
+          .then((response) => response.json())
+          .then((data) => {
+            document.getElementById("current-runner-name").textContent =
+              data.current_runner;
+            document.getElementById("elapsed-time").textContent =
+              data.elapsed_time;
+            document.getElementById("last-runner").textContent =
+              data.last_run.name;
+            document.getElementById("last-time").textContent =
+              data.last_run.time.toFixed(2);
+          })
+          .catch((error) => console.error("Error fetching live data:", error));
+      }
+
+      // Update leaderboard
+      function updateLeaderboard() {
+        fetch("/api/stats")
+          .then((response) => response.json())
+          .then((data) => {
+            const leaderboardDiv = document.getElementById(
+              "leaderboard-content"
+            );
+            let html = "";
+
+            if (data.fastest_single_run[0]) {
+              html += `<div class="stat-item">
+                            <span class="stat-label">Fastest Run:</span>
+                            <span class="stat-value">${
+                              data.fastest_single_run[0]
+                            } (${data.fastest_single_run[1].toFixed(2)}s)</span>
+                        </div>`;
+            }
+
+            if (data.fastest_average_time[0]) {
+              html += `<div class="stat-item">
+                            <span class="stat-label">Best Average:</span>
+                            <span class="stat-value">${
+                              data.fastest_average_time[0]
+                            } (${data.fastest_average_time[1].toFixed(
+                2
+              )}s)</span>
+                        </div>`;
+            }
+
+            if (data.most_runs[0]) {
+              html += `<div class="stat-item">
+                            <span class="stat-label">Most Runs:</span>
+                            <span class="stat-value">${data.most_runs[0]} (${data.most_runs[1]})</span>
+                        </div>`;
+            }
+
+            if (data.top_10_fastest.length > 0) {
+              html += '<div class="top-runs"><h3>Top 10 Fastest Runs</h3><ul>';
+              data.top_10_fastest.forEach((run, index) => {
+                html += `<li>${index + 1}. ${run[0]} - ${run[1].toFixed(
+                  2
+                )}s</li>`;
+              });
+              html += "</ul></div>";
+            }
+
+            leaderboardDiv.innerHTML = html;
+          })
+          .catch((error) => console.error("Error fetching stats:", error));
+      }
+
+      // Update every 100ms for live data, every 5 seconds for leaderboard
+      setInterval(updateLiveData, 100);
+      setInterval(updateLeaderboard, 5000);
+
+      // Initial load
+      updateLiveData();
+      updateLeaderboard();
+    </script>
+  </body>
+</html>

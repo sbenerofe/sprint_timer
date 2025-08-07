@@ -1,0 +1,4 @@
+Flask==2.3.3
+Flask-HTTPAuth==4.8.0
+luma.led-matrix==2.0.0
+RPi.GPIO==0.7.1
