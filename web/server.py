@@ -24,13 +24,14 @@ def fan_view():
 @app.route('/api/live_data')
 def live_data():
     """API endpoint for live data polling by the fan view."""
-    # This needs to get data from the main application.
-    # We will solve this by having the main app update a global or shared object.
-    # For now, placeholder:
+    # Get shared data from the main application
+    shared_data = app.config.get('SHARED_DATA', {})
     return jsonify({
-        'current_runner': 'Runner A',
-        'elapsed_time': '1.23',
-        'last_run': {'name': 'Runner B', 'time': 4.56}
+        'current_runner': shared_data.get('current_runner', 'N/A'),
+        'elapsed_time': shared_data.get('elapsed_time', '0.00'),
+        'last_run': shared_data.get('last_run', {'name': 'N/A', 'time': 0.0}),
+        'timing_mode': shared_data.get('timing_mode', 'SYSTEM'),
+        'gps_status': shared_data.get('gps_status', 'UNKNOWN')
     })
 
 @app.route('/api/stats')
@@ -38,6 +39,16 @@ def stats():
     """API endpoint for fetching all stats."""
     stats_data = database.get_leaderboard_stats()
     return jsonify(stats_data)
+
+@app.route('/api/timing_status')
+def timing_status():
+    """API endpoint for timing system status."""
+    shared_data = app.config.get('SHARED_DATA', {})
+    return jsonify({
+        'timing_mode': shared_data.get('timing_mode', 'SYSTEM'),
+        'gps_status': shared_data.get('gps_status', 'UNKNOWN'),
+        'precision': 'nanosecond' if shared_data.get('timing_mode') in ['GPS', 'WIRED'] else 'millisecond'
+    })
 
 # --- Admin Routes ---
 @app.route('/admin')

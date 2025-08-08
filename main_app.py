@@ -6,7 +6,8 @@ from ui.app_ui import SprintTimerUI
 from hardware.gate_sensor import GateSensor
 from hardware.display_driver import TimingDisplay
 from common import config, database
-from common.network import parse_message, MSG_GATE_TRIGGER
+from common.timing_sync import TimingSynchronizer
+from common.network import parse_message, MSG_GATE_TRIGGER, MSG_TIME_SYNC
 from web import server
 
 # Application states
@@ -22,17 +23,23 @@ class MainApplication:
         self.current_runner = None # (id, name)
         self.start_time = 0
         self.finish_time = 0
+        self.timing_mode = 'SYSTEM'
         
         # Shared data for the web server
         self.shared_web_data = {
             'current_runner': 'N/A',
             'elapsed_time': '0.00',
-            'last_run': {'name': 'N/A', 'time': 0.0}
+            'last_run': {'name': 'N/A', 'time': 0.0},
+            'timing_mode': 'SYSTEM',
+            'gps_status': 'UNKNOWN'
         }
 
+        # Initialize timing synchronizer (master mode)
+        self.timing_sync = TimingSynchronizer(is_master=True)
+        
         # Initialize components
         database.initialize_db()
-        self.local_gate = GateSensor(config.PRIMARY_GATE_PIN, config.DEBOUNCE_TIME)
+        self.local_gate = GateSensor(config.PRIMARY_GATE_PIN, config.DEBOUNCE_TIME, self.timing_sync)
         self.display = TimingDisplay(config.PRIMARY_DISPLAY_CS_PIN)
         
         # UI setup
@@ -40,6 +47,8 @@ class MainApplication:
             'set_runner': self.set_runner,
             'add_runner': self.add_runner,
             'reset_timer': self.reset_system,
+            'start_gps_sync': self.start_gps_sync,
+            'send_wired_signal': self.send_wired_signal,
         }
         self.ui = SprintTimerUI(app_callbacks)
         
@@ -47,6 +56,7 @@ class MainApplication:
         threading.Thread(target=self.network_listener, daemon=True).start()
         threading.Thread(target=self.local_gate_handler, daemon=True).start()
         threading.Thread(target=self.ui_updater, daemon=True).start()
+        threading.Thread(target=self.timing_monitor, daemon=True).start()
         threading.Thread(target=server.run_server, args=(self.shared_web_data,), daemon=True).start()
 
     def run(self):
@@ -69,21 +79,21 @@ class MainApplication:
         if self.state == STATE_ARMED:
             self.state = STATE_RUNNING
             self.start_time = timestamp
-            print(f"Run started at {self.start_time}")
+            print(f"Run started at {self.start_time} (mode: {self.timing_mode})")
 
     def finish_run(self, timestamp):
         if self.state == STATE_RUNNING:
             self.state = STATE_FINISHED
             self.finish_time = timestamp
             run_time = self.finish_time - self.start_time
-            print(f"Run finished. Time: {run_time:.2f}s")
+            print(f"Run finished. Time: {run_time:.6f}s (mode: {self.timing_mode})")
             
             # Save to DB
             if self.current_runner:
                 database.add_run_time(self.current_runner[0], run_time)
             
             # Update UI and displays
-            self.ui.update_last_run_time(f"{run_time:.2f}")
+            self.ui.update_last_run_time(f"{run_time:.3f}")
             self.display.show_time(run_time)
             # update shared web data
             self.shared_web_data['last_run'] = {'name': self.current_runner[1], 'time': run_time}
@@ -97,6 +107,24 @@ class MainApplication:
         self.shared_web_data['elapsed_time'] = "0.00"
         self.display.clear()
         print("System reset.")
+
+    def start_gps_sync(self):
+        """Start GPS synchronization."""
+        if self.timing_sync.wait_for_gps_lock():
+            self.timing_mode = 'GPS'
+            self.shared_web_data['timing_mode'] = 'GPS'
+            self.shared_web_data['gps_status'] = 'LOCKED'
+            print("GPS synchronization active")
+        else:
+            print("GPS synchronization failed")
+
+    def send_wired_signal(self):
+        """Send wired synchronization signal."""
+        if self.timing_sync.get_current_mode() == 'WIRED':
+            timestamp = self.timing_sync.send_wired_signal()
+            self.timing_mode = 'WIRED'
+            self.shared_web_data['timing_mode'] = 'WIRED'
+            print(f"Wired signal sent at {timestamp}")
 
     # --- Handlers and Threads ---
     def local_gate_handler(self):
@@ -136,22 +164,50 @@ class MainApplication:
                 message = parse_message(data)
                 if message['type'] == MSG_GATE_TRIGGER:
                     timestamp = message['payload']['timestamp']
-                    self.handle_gate_trigger('remote', timestamp)
+                    timing_mode = message['payload'].get('timing_mode', 'SYSTEM')
+                    self.handle_gate_trigger('remote', timestamp, timing_mode)
                     
         except Exception as e:
             print(f"Remote connection error: {e}")
         finally:
             client_socket.close()
 
-    def handle_gate_trigger(self, source, timestamp):
+    def handle_gate_trigger(self, source, timestamp, timing_mode=None):
         """Unified logic for handling a trigger from any gate."""
-        print(f"Trigger from {source} gate at {timestamp}")
+        print(f"Trigger from {source} gate at {timestamp} (mode: {timing_mode})")
+        
+        # Update timing mode if provided
+        if timing_mode:
+            self.timing_mode = timing_mode
+            self.shared_web_data['timing_mode'] = timing_mode
+        
         # Logic based on system configuration (which gate is start/stop)
         # For now, assume local is start and remote is stop.
         if source == 'local' and self.state == STATE_ARMED:
             self.start_run(timestamp)
         elif source == 'remote' and self.state == STATE_RUNNING:
             self.finish_run(timestamp)
+
+    def timing_monitor(self):
+        """Thread to monitor timing system status."""
+        while True:
+            try:
+                current_mode = self.timing_sync.get_current_mode()
+                if current_mode != self.timing_mode:
+                    self.timing_mode = current_mode
+                    self.shared_web_data['timing_mode'] = current_mode
+                    print(f"Timing mode changed to: {current_mode}")
+                
+                # Update GPS status
+                if current_mode == 'GPS':
+                    self.shared_web_data['gps_status'] = 'LOCKED'
+                else:
+                    self.shared_web_data['gps_status'] = 'UNAVAILABLE'
+                
+                time.sleep(5)  # Check every 5 seconds
+            except Exception as e:
+                print(f"Timing monitor error: {e}")
+                time.sleep(5)
 
     def ui_updater(self):
         """Thread to periodically update the UI time display."""

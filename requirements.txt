@@ -2,3 +2,5 @@ Flask==2.3.3
 Flask-HTTPAuth==4.8.0
 luma.led-matrix==2.0.0
 RPi.GPIO==0.7.1
+gpsd-py3==0.3.0
+pyserial==3.5

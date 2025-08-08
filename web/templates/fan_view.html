@@ -12,7 +12,7 @@
   <body>
     <div class="container">
       <header>
-        <h1>Sprint Timer</h1>
+        <h1>Sprint Timer - High Precision</h1>
       </header>
 
       <div class="main-content">
@@ -33,6 +33,24 @@
           <div id="last-run-info">
             <span id="last-runner">--</span>
             <span id="last-time">--.--</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="timing-status">
+        <h2>Timing System Status</h2>
+        <div class="status-grid">
+          <div class="status-item">
+            <span class="status-label">Mode:</span>
+            <span id="timing-mode" class="status-value">SYSTEM</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">GPS:</span>
+            <span id="gps-status" class="status-value">UNKNOWN</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">Precision:</span>
+            <span id="timing-precision" class="status-value">millisecond</span>
           </div>
         </div>
       </div>
@@ -59,8 +77,27 @@
               data.last_run.name;
             document.getElementById("last-time").textContent =
               data.last_run.time.toFixed(2);
+            document.getElementById("timing-mode").textContent =
+              data.timing_mode;
+            document.getElementById("gps-status").textContent = data.gps_status;
           })
           .catch((error) => console.error("Error fetching live data:", error));
+      }
+
+      // Update timing status
+      function updateTimingStatus() {
+        fetch("/api/timing_status")
+          .then((response) => response.json())
+          .then((data) => {
+            document.getElementById("timing-mode").textContent =
+              data.timing_mode;
+            document.getElementById("gps-status").textContent = data.gps_status;
+            document.getElementById("timing-precision").textContent =
+              data.precision;
+          })
+          .catch((error) =>
+            console.error("Error fetching timing status:", error)
+          );
       }
 
       // Update leaderboard
@@ -115,13 +152,15 @@
           .catch((error) => console.error("Error fetching stats:", error));
       }
 
-      // Update every 100ms for live data, every 5 seconds for leaderboard
+      // Update every 100ms for live data, every 5 seconds for leaderboard and timing status
       setInterval(updateLiveData, 100);
       setInterval(updateLeaderboard, 5000);
+      setInterval(updateTimingStatus, 2000);
 
       // Initial load
       updateLiveData();
       updateLeaderboard();
+      updateTimingStatus();
     </script>
   </body>
 </html>

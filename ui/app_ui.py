@@ -5,7 +5,7 @@ from tkinter import simpledialog, messagebox
 class SprintTimerUI(tk.Tk):
     def __init__(self, app_callbacks):
         super().__init__()
-        self.title("Sprint Timer")
+        self.title("Sprint Timer - High Precision")
         self.geometry("800x480") # For the official 7" display
         self.app_callbacks = app_callbacks # Callbacks to the main application logic
 
@@ -14,6 +14,8 @@ class SprintTimerUI(tk.Tk):
         self.current_runner_var = tk.StringVar(value="No Runner Selected")
         self.elapsed_time_var = tk.StringVar(value="0.00")
         self.last_run_time_var = tk.StringVar(value="--.--")
+        self.timing_mode_var = tk.StringVar(value="SYSTEM")
+        self.gps_status_var = tk.StringVar(value="UNKNOWN")
 
         # Create main frames
         self.create_widgets()
@@ -66,6 +68,28 @@ class SprintTimerUI(tk.Tk):
         tk.Label(status_frame, text="Current Runner:", font=('Helvetica', 12, 'bold')).pack(anchor=tk.W)
         tk.Label(status_frame, textvariable=self.current_runner_var, 
                 font=('Helvetica', 18, 'bold'), fg='#FF5722').pack(anchor=tk.W)
+        
+        # Timing mode section
+        timing_frame = tk.Frame(left_frame)
+        timing_frame.pack(fill=tk.X, pady=(10, 0))
+        
+        tk.Label(timing_frame, text="Timing Mode:", font=('Helvetica', 12, 'bold')).pack(anchor=tk.W)
+        tk.Label(timing_frame, textvariable=self.timing_mode_var, 
+                font=('Helvetica', 14, 'bold'), fg='#9C27B0').pack(anchor=tk.W)
+        
+        tk.Label(timing_frame, text="GPS Status:", font=('Helvetica', 12, 'bold')).pack(anchor=tk.W)
+        tk.Label(timing_frame, textvariable=self.gps_status_var, 
+                font=('Helvetica', 12), fg='#FF9800').pack(anchor=tk.W)
+        
+        # Timing controls
+        timing_controls = tk.Frame(left_frame)
+        timing_controls.pack(fill=tk.X, pady=(10, 0))
+        
+        tk.Button(timing_controls, text="Start GPS Sync", command=self.app_callbacks['start_gps_sync'],
+                 bg='#FF9800', fg='white', font=('Helvetica', 10)).pack(fill=tk.X, pady=(0, 2))
+        
+        tk.Button(timing_controls, text="Send Wired Signal", command=self.app_callbacks['send_wired_signal'],
+                 bg='#795548', fg='white', font=('Helvetica', 10)).pack(fill=tk.X)
         
         # -- Right Frame Widgets --
         # Title
@@ -131,3 +155,9 @@ class SprintTimerUI(tk.Tk):
 
     def update_last_run_time(self, time_str):
         self.last_run_time_var.set(time_str)
+    
+    def update_timing_mode(self, mode):
+        self.timing_mode_var.set(mode)
+    
+    def update_gps_status(self, status):
+        self.gps_status_var.set(status)
